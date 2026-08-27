@@ -1,0 +1,25 @@
+# Core
+numpy
+pandas
+networkx
+
+# Clustering
+scikit-learn
+pyclustering
+jenkspy
+
+# Stats / distribution fitting
+statsmodels
+powerlaw
+scipy
+
+# Parallelization
+joblib
+tqdm
+
+# Visualization
+matplotlib
+
+# Jupyter
+jupyter
+ipykernel
