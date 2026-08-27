@@ -15,6 +15,8 @@ interaction-based tie-strength metrics.
   built.
 
 ## Structure
+
+```
 .
 |-- PIPELINE.md
 |-- README.md
@@ -41,6 +43,7 @@ interaction-based tie-strength metrics.
 |   `-- summarize_rings.py             <- circle-count and size tables
 |-- output/
 `-- figures/
+```
 
 ## Setup
 ```bash
