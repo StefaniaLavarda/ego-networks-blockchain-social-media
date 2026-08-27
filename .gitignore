@@ -1,0 +1,75 @@
+# ============================================================
+# .gitignore -- covers both the LaTeX thesis and the Python/
+# Jupyter data pipeline (ego-network extraction, clustering, etc.)
+# ============================================================
+
+# ---------- LaTeX build artifacts ----------
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.figlist
+*.makefile
+*.nav
+*.snm
+*.vrb
+*.xdv
+*.idx
+*.ilg
+*.ind
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+main.pdf
+*.bcf
+*.run.xml
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.Python
+build/
+dist/
+venv/
+.venv/
+env/
+
+# ---------- Jupyter ----------
+.ipynb_checkpoints/
+
+# ---------- Data files ----------
+*.csv
+*.pkl
+*.pickle
+*.parquet
+*.json
+data/
+output/
+!references.bib
+!.gitkeep
+
+# ---------- OS-specific ----------
+.DS_Store
+Thumbs.db
+
+# ---------- Editor/IDE ----------
+.vscode/
+.idea/
+*.swp
+
+# ---------- Overleaf sync artifacts ----------
+.overleaf-sync-timestamp
