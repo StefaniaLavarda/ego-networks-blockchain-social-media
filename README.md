@@ -1,53 +1,46 @@
 # Thesis Analysis Repository
-Ego-network circle identification on Steemit, testing Dunbar's theory of
-concentric ego-network circles using adaptive clustering on
+
+Ego-network circle identification on Steemit, testing Dunbar's theory
+of concentric ego-network circles using adaptive clustering on
 interaction-based tie-strength metrics.
 
-**Scope note:** the thesis originally considered both Steemit and Hive;
-the advisor's dataset covers **Steemit only** (Jan-Jun 2017), so the
-scope has been narrowed accordingly. See Chapter 2 for the corrections
-this required.
-
 ## Dataset
-- Source: advisor-provided CSV, `steem_vote_comment_transfer_01012017_30062017.csv`
+- Source: `steem_vote_comment_transfer_01012017_30062017.csv`
 - 31,170,789 rows, Jan 1 - Jun 30 2017
 - Schema: `source, target, weight, date, type`
-- Three interaction types: `vote`, `comment`, `transfer` (financial
-  transaction) 
-- **tie strength uses frequency only**, for
-  all three interaction types. `weight` and `date` are read but
-  deliberately unused
+- Three interaction types: `vote`, `comment`, `transfer`
+- Tie strength is frequency-based, computed independently per
+  interaction type. `date` and `weight` are read but not used.
+- Self-loops (`source == target`) are excluded before any network is
+  built.
 
 ## Structure
-
-```
 .
-|-- PIPELINE.md              <- full pipeline documentation
-|-- README.md                 
+|-- PIPELINE.md
+|-- README.md
 |-- requirements.txt
 |-- .gitignore
 |-- data/
-|   |-- raw/                  <- raw CSV goes here (gitignored)
-|   `-- processed/            <- personal_networks.pkl, rings_*.pkl
-|                                 (gitignored)
-|-- personalnetwork/           <- core package
-|   |-- __init__.py            <- AlterData, EgoInteractions
-|   |                            
+|   |-- raw/
+|   `-- processed/
+|-- personalnetwork/
+|   |-- __init__.py            <- AlterData, EgoInteractions, INTERACTION_TYPES
 |   `-- clustering/
-|       `-- __init__.py        <- frequency_tie_strength(), adaptive
-|                                  clustering (GMM/X-means/Jenks)
+|       `-- __init__.py        <- frequency_tie_strength(), adaptive clustering
 |-- scripts/
-|   |-- extract_personal_networks.py   <- CSV -> EgoInteractions dict
-|   |-- check_threshold.py             <- reports ego counts >= threshold,
-|   |                                      per interaction type
-|   |-- run_clustering.py              <- tie-strength + adaptive
-|   |                                      clustering, one interaction
-|   |                                      type at a time, parallelized
-|   `-- summarize_rings.py             <- circle-count distributions +
-|                                          size tables (post-clustering)
-|-- output/                    <- result tables (gitignored)
-`-- figures/                   <- generated plots
-```
+|   |-- build_graph.py                 <- CSV -> networkx.DiGraph
+|   |-- compute_bot_ids.py             <- graph -> suspicious account IDs
+|   |-- extract_personal_networks.py   <- CSV + bot IDs -> EgoInteractions dict
+|   |-- filter_suspicious_accounts.py  <- bot filter on an existing pickle
+|   |-- compute_bot_scores.py          <- diagnostic: in/out-degree CDF
+|   |-- check_bot_overlap.py           <- diagnostic: bot/threshold overlap
+|   |-- check_self_loops.py            <- diagnostic: self-loop counts
+|   |-- check_weight.py                <- diagnostic: raw weight values
+|   |-- check_threshold.py             <- ego counts per threshold/type
+|   |-- run_clustering.py              <- tie strength + adaptive clustering
+|   `-- summarize_rings.py             <- circle-count and size tables
+|-- output/
+`-- figures/
 
 ## Setup
 ```bash
@@ -58,17 +51,25 @@ pip install -r requirements.txt
 
 ## Usage
 ```bash
-# 1. Extract personal networks from raw CSV (one-time, ~31M rows)
-python3 scripts/extract_personal_networks.py data/raw/steem_vote_comment_transfer_01012017_30062017.csv data/processed/personal_networks.pkl
+# 1. Build the communication graph
+python3 scripts/build_graph.py data/raw/steem_vote_comment_transfer_01012017_30062017.csv data/processed/communication_graph.pkl
 
-# 2. Check how many egos qualify (>= threshold alters) per interaction type
-python3 scripts/check_threshold.py data/processed/personal_networks.pkl
+# 2. Identify suspicious/bot accounts
+python3 scripts/compute_bot_ids.py data/processed/communication_graph.pkl output/bot_ids.txt output/degrees.csv
 
-# 3. Run adaptive clustering, once per interaction type
-python3 scripts/run_clustering.py data/processed/personal_networks.pkl vote data/processed/rings_vote.pkl
-python3 scripts/run_clustering.py data/processed/personal_networks.pkl comment data/processed/rings_comment.pkl
+# 3. Extract personal networks, excluding bots
+python3 scripts/extract_personal_networks.py data/raw/steem_vote_comment_transfer_01012017_30062017.csv data/processed/personal_networks_filtered.pkl output/bot_ids.txt
 
-# 4. Summarize results
-python3 scripts/summarize_rings.py data/processed/rings_vote.pkl output/tabella_vote.csv
-python3 scripts/summarize_rings.py data/processed/rings_comment.pkl output/tabella_comment.csv
+# 4. Check ego counts per interaction type
+python3 scripts/check_threshold.py data/processed/personal_networks_filtered.pkl
+
+# 5. Run adaptive clustering
+python3 scripts/run_clustering.py data/processed/personal_networks_filtered.pkl vote data/processed/rings_vote_filtered.pkl
+python3 scripts/run_clustering.py data/processed/personal_networks_filtered.pkl comment data/processed/rings_comment_filtered.pkl
+python3 scripts/run_clustering.py data/processed/personal_networks_filtered.pkl transfer data/processed/rings_transfer_filtered.pkl
+
+# 6. Summarize results
+python3 scripts/summarize_rings.py data/processed/rings_vote_filtered.pkl output/tabella_vote.csv
+python3 scripts/summarize_rings.py data/processed/rings_comment_filtered.pkl output/tabella_comment.csv
+python3 scripts/summarize_rings.py data/processed/rings_transfer_filtered.pkl output/tabella_transfer.csv
 ```
