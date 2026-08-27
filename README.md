@@ -1,4 +1,4 @@
-# Thesis Analysis Repository
+# The Organization of Ego-Networks in Blockchain-Based Social Media (Steemit)
 
 Ego-network circle identification on Steemit, testing Dunbar's theory
 of concentric ego-network circles using adaptive clustering on
