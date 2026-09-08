@@ -1,21 +1,15 @@
 """
 personalnetwork/__init__.py
 
-Adapted for the real Steemit dataset provided by the advisor
-(source,target,weight,date,type -- 31M rows, Jan-Jun 2017).
-
-SIMPLIFIED vs. earlier draft: tie strength uses frequency only (per
-advisor's instruction), so all hour/day-binning machinery (needed only
-for the signature-based metric) has been removed entirely. This is a
-much simpler design: just a count per (ego, alter, interaction_type).
+Core data structures for representing Steemit ego-networks. Tie
+strength is based on interaction frequency: a count per
+(ego, alter, interaction_type), with no time information tracked.
 """
 
 from collections import Counter
 import numpy as np
 import pandas as pd
 
-# Confirmed from the real data: `cut -d',' -f5 ... | sort -u` returned
-# exactly these three values (plus the header row itself).
 INTERACTION_TYPES = ['vote', 'comment', 'transfer']
 
 
@@ -48,8 +42,8 @@ class EgoInteractions(object):
 
     def process_interaction(self, alter, interaction_type):
         """
-        No timestamp parameter -- time is deliberately ignored per the
-        advisor's instruction (frequency-only tie strength).
+        Records one interaction with an alter. Time is not tracked;
+        tie strength is based only on interaction frequency.
         """
         self._get_alter_data(alter).add_interaction(interaction_type)
         self.total_counts[interaction_type] += 1
@@ -67,8 +61,8 @@ class EgoInteractions(object):
 
 def ring_size_to_table(rings_in_personal_network, intervals, min_network_size=50):
     """
-    Builds a summary table of ring counts/sizes across all egos.
-    Unchanged from the original -- fully data-agnostic.
+    Builds a summary table of ring counts and sizes across all egos,
+    for each clustering algorithm and each resulting number of rings.
     """
     algo_results = {}
     for ego_data in rings_in_personal_network.values():
