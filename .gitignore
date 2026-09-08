@@ -59,6 +59,7 @@ env/
 *.json
 data/
 output/
+figures/
 !references.bib
 !.gitkeep
 
