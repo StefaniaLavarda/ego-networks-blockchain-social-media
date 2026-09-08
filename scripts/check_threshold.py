@@ -1,17 +1,20 @@
 """
 check_threshold.py
 
-Analizza le personal network estratte e riporta, per ciascun tipo di
-interazione (vote, comment, transfer), quanti ego superano la soglia
-minima di alter richiesta per l'analisi (default 50, come nei paper
-Zignani et al. -- vedi PIPELINE.md, Fase 4).
+Analyses extracted personal networks and reports, for each
+interaction type (vote, comment, transfer), how many egos reach the
+minimum personal network size required for circle identification
+(default 50).
 
-Uso:
-    python3 check_threshold.py <input_pickle> [soglia]
+This script is run once per dataset, since vote/comment and transfer
+come from two separate raw files.
 
-Esempio:
-    python3 check_threshold.py data/processed/personal_networks.pkl
-    python3 check_threshold.py data/processed/personal_networks.pkl 50
+Usage:
+    python3 check_threshold.py <input_pickle> [threshold]
+
+Example:
+    python3 check_threshold.py data/processed/personal_networks_filtered.pkl
+    python3 check_threshold.py data/processed/personal_networks_transfer_filtered.pkl
 """
 
 import sys
@@ -29,8 +32,8 @@ def check_threshold(input_pickle, threshold=50):
     with open(input_pickle, 'rb') as f:
         personal_networks = pickle.load(f)
 
-    print(f"Ego totali nel dataset: {len(personal_networks)}")
-    print(f"Soglia analizzata: >= {threshold} alter\n")
+    print(f"Total egos in dataset: {len(personal_networks)}")
+    print(f"Threshold analysed: >= {threshold} alters\n")
 
     for interaction_type in INTERACTION_TYPES:
         degrees = [ego.out_degree(interaction_type) for ego in personal_networks.values()]
@@ -40,13 +43,13 @@ def check_threshold(input_pickle, threshold=50):
         n_with_any = np.sum(degrees > 0)
 
         print(f"--- {interaction_type} ---")
-        print(f"  Ego con almeno 1 interazione di questo tipo: {n_with_any}")
-        print(f"  Ego con >= {threshold} alter: {n_above} ({100*n_above/len(personal_networks):.2f}% del totale)")
+        print(f"  Egos with at least 1 interaction of this type: {n_with_any}")
+        print(f"  Egos with >= {threshold} alters: {n_above} ({100*n_above/len(personal_networks):.2f}% of total)")
         if n_with_any > 0:
             active_degrees = degrees[degrees > 0]
-            print(f"  Distribuzione (solo ego attivi su questo tipo): "
-                  f"mediana={np.median(active_degrees):.0f}, "
-                  f"media={np.mean(active_degrees):.1f}, "
+            print(f"  Distribution (active egos only): "
+                  f"median={np.median(active_degrees):.0f}, "
+                  f"mean={np.mean(active_degrees):.1f}, "
                   f"max={np.max(active_degrees)}")
         print()
 
