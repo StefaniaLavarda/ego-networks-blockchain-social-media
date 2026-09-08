@@ -1,13 +1,18 @@
 """
 check_self_loops.py
 
-Conta quante righe del CSV grezzo hanno source == target (self-loop),
-suddivise per tipo di interazione -- prima di decidere come trattarle
-in Sezione 3.3.1, serve sapere quante sono e per quali tipi compaiono,
-non solo se compaiono.
+Counts how many rows of a raw CSV have source == target (self-loop),
+broken down by interaction type.
 
-Uso:
+This script is run once per dataset, since vote/comment and transfer
+come from two separate raw files.
+
+Usage:
     python3 check_self_loops.py <input_csv>
+
+Example:
+    python3 check_self_loops.py data/raw/steem_vote_comment_transfer_01012017_30062017.csv
+    python3 check_self_loops.py data/raw/steem_transfer_01112018_31052019.csv
 """
 
 import sys
@@ -21,7 +26,7 @@ def check_self_loops(input_csv):
 
     with open(input_csv, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
-        next(reader)  # salta header
+        next(reader)  # skip header
         for row in reader:
             if len(row) != 5:
                 continue
@@ -32,20 +37,8 @@ def check_self_loops(input_csv):
                 if len(self_loop_examples[interaction_type]) < 5:
                     self_loop_examples[interaction_type].append((source, weight, date))
 
-    print("Self-loop (source == target) per tipo di interazione:\n")
+    print("Self-loops (source == target) by interaction type:\n")
     for itype in n_total:
         n = n_self_loop.get(itype, 0)
         tot = n_total[itype]
-        pct = 100 * n / tot if tot else 0
-        print(f"--- {itype} ---")
-        print(f"  Righe totali: {tot}")
-        print(f"  Self-loop: {n} ({pct:.4f}%)")
-        if self_loop_examples[itype]:
-            print(f"  Esempi (account, weight, date): {self_loop_examples[itype]}")
-        print()
-
-if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print(__doc__)
-        sys.exit(1)
-    check_self_loops(sys.argv[1])
+        pct = 100 * n / tot
