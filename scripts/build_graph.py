@@ -1,40 +1,25 @@
 """
 build_graph.py
 
-Costruisce un unico grafo diretto (networkx.DiGraph) dal CSV grezzo,
-seguendo l'approccio del relatore (si veda il suo notebook, celle
-4-9): un solo oggetto grafo, con un arco per ogni coppia (source,
-target) osservata, e un attributo di peso separato per ciascun tipo
-di interazione (c_vote, c_comment, c_transfer) sullo stesso arco --
-non un grafo per tipo.
+Builds a single directed graph (networkx.DiGraph) from a raw CSV
+interaction file. One edge is created per observed (source, target)
+pair, with a separate weight attribute for each interaction type
+(c_vote, c_comment, c_transfer) stored on the same edge.
 
-Questa scelta e' motivata da due esigenze che, con tre grafi separati,
-richiederebbero di ricombinare informazione sparsa su piu' oggetti:
-  - il bot detection (Sezione 3.2.2) richiede il grado COMBINATO su
-    tutti e tre i tipi di interazione, esattamente come nel notebook
-    del relatore (che calcola il grado su call+sms insieme, mai per
-    canale separato). Con un solo grafo, G.out_degree()/G.in_degree()
-    restituiscono gia' questo conteggio combinato automaticamente.
-  - il clustering (Sezione 3.5) richiede invece i tre tipi separati:
-    per questo, quando si estrae la personal network di un ego, si
-    legge solo l'attributo di peso specifico del tipo di interazione
-    in analisi (es. c_vote), ignorando gli altri due.
+Self-loops (source == target, e.g. a self-vote on Steemit) are
+discarded and counted separately, per interaction type, from other
+invalid rows (malformed rows, unrecognised interaction type).
 
-SELF-LOOP: le righe con source == target (es. un self-vote su
-Steemit) vengono scartate qui, coerentemente con
-extract_personal_networks.py. Vengono contate SEPARATAMENTE dagli
-altri scarti (righe malformate, tipo non valido) e per tipo di
-interazione, perche' non sono uno scarto "tecnico" ma un'esclusione
-motivata teoricamente (un self-loop non e' una relazione ego-alter,
-si veda Sezione 3.3.1) -- il conteggio preciso per tipo serve da
-statistica descrittiva per il Cap. 4 (es. il self-vote come strategia
-di reward, gia' documentata in letteratura).
+This script is run once per dataset, since vote/comment and transfer
+come from two separate raw files covering different time periods.
+Each run produces its own graph; the two are never merged.
 
-Uso:
+Usage:
     python3 build_graph.py <input_csv> <output_graph_pickle>
 
-Esempio:
-    python3 build_graph.py data/raw/steem_....csv data/processed/communication_graph.pkl
+Example:
+    python3 build_graph.py data/raw/steem_vote_comment_transfer_01012017_30062017.csv data/processed/communication_graph.pkl
+    python3 build_graph.py data/raw/steem_transfer_01112018_31052019.csv data/processed/communication_graph_transfer.pkl
 """
 
 import sys
@@ -55,6 +40,7 @@ def build_graph(input_csv, output_pickle):
     n_total = 0
     n_skipped_invalid = 0
     n_self_loop = defaultdict(int)
+    types_seen = set()
 
     with open(input_csv, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
@@ -73,6 +59,8 @@ def build_graph(input_csv, output_pickle):
                 n_skipped_invalid += 1
                 continue
 
+            types_seen.add(interaction_type)
+
             if source == target:
                 n_self_loop[interaction_type] += 1
                 continue
@@ -85,21 +73,22 @@ def build_graph(input_csv, output_pickle):
                 communication_graph.add_edge(source, target, **{attr_name: 1})
 
             if n_total % 5000000 == 0:
-                print(f"  ...{n_total} righe processate, "
-                      f"{communication_graph.number_of_nodes()} nodi finora")
+                print(f"  ...{n_total} rows processed, "
+                      f"{communication_graph.number_of_nodes()} nodes so far")
 
     n_self_loop_total = sum(n_self_loop.values())
-    print(f"\nFatto. Righe totali: {n_total}, scartate (malformate/tipo non valido): {n_skipped_invalid}")
-    print(f"Self-loop esclusi (source == target), per tipo:")
+    print(f"\nDone. Total rows: {n_total}, discarded (malformed/invalid type): {n_skipped_invalid}")
+    print(f"Interaction types found in this file: {sorted(types_seen)}")
+    print(f"Self-loops excluded (source == target), by type:")
     for itype in INTERACTION_TYPES:
         print(f"  {itype}: {n_self_loop.get(itype, 0)}")
-    print(f"  totale self-loop: {n_self_loop_total}")
-    print(f"Nodi: {communication_graph.number_of_nodes()}, "
-          f"archi: {communication_graph.number_of_edges()}")
+    print(f"  total self-loops: {n_self_loop_total}")
+    print(f"Nodes: {communication_graph.number_of_nodes()}, "
+          f"edges: {communication_graph.number_of_edges()}")
 
     with open(output_pickle, 'wb') as f:
         pickle.dump(communication_graph, f)
-    print(f"Salvato in {output_pickle}")
+    print(f"Saved to {output_pickle}")
 
 
 if __name__ == '__main__':
