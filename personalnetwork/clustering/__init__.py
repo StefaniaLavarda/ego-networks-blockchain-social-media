@@ -1,26 +1,13 @@
 """
 personalnetwork/clustering/__init__.py
 
-Adapted from the CDR-based implementation (Zignani et al.). The five
-clustering functions and the adaptive-interval logic are copied over
-essentially unchanged -- confirmed data-agnostic, operating purely on
-numeric tie-strength arrays. Only signature()/relevance() needed
-generalizing away from hardcoded 'call'/'sms' keys.
-
-MeanShift and Head/Tail Breaks are kept for completeness (matching the
-original comparison table) but are NOT part of the adaptive method --
-the papers explicitly exclude them from the final approach, and HTB's
-own implementation looks buggy (see head_tail_break() docstring).
+Adaptive clustering functions for identifying Dunbar circles from
+one-dimensional tie-strength arrays: Gaussian Mixture Models, X-means,
+and Jenks natural breaks, each constrained to a size-dependent range
+of admissible cluster counts. Mean Shift and Head/Tail Breaks are also
+included but are not part of the adaptive method.
 """
 
-# PATCH, applied here (not in calling scripts): pyclustering (for
-# x-means) uses `numpy.warnings` internally, an alias removed in NumPy
-# 2.0. This MUST live here, before `import pyclustering`, rather than
-# in any calling script -- joblib's process-based parallelism (loky,
-# using 'spawn' on macOS) launches separate OS processes that each
-# reimport this module fresh, so a patch applied only in a calling
-# script's global scope never reaches the worker processes. Patching
-# here guarantees it re-runs in every process that imports this module.
 import numpy as np
 import warnings as _warnings
 if not hasattr(np, 'warnings'):
@@ -42,26 +29,18 @@ def frequency_tie_strength(alter_data, ego_total, interaction_type):
     Frequency-based tie strength: fraction of the ego's total
     interactions (of this specific type) that went to this alter.
 
-    Replaces the earlier signature()/relevance() pair -- the advisor
-    instructed using frequency only, for all three interaction types
-    (vote, comment, transfer), so no hour/day-binning is needed at all.
-
-    interaction_type: a SINGLE type (e.g. 'vote'), not a list -- per
-    the decision to study interaction types separately (see PIPELINE.md,
-    Stage 6). Call this once per type, building a separate tie-strength
-    dict each time, then cluster each one independently.
+    interaction_type is a single type (e.g. 'vote'), not a list, since
+    interaction types are studied separately: call this once per type,
+    building a separate tie-strength dict each time, then cluster each
+    one independently.
     """
     return alter_data.counts[interaction_type] / ego_total
 
 
 def get_ring_interval(degree):
     """
-    Adaptive cluster-count constraint, exactly matching the Support
-    Information PDF's rule. Fully data-agnostic -- no changes needed.
-
-    TODO: discuss with advisor whether to keep these exact thresholds
-    (50/100/300) for direct comparability with the CDR papers, or
-    re-derive them from your own Steemit/Hive out-degree distribution.
+    Adaptive cluster-count constraint: the admissible range for the
+    number of circles, based on personal network size.
     """
     if degree >= 50 and degree < 100:
         return (3, 4)
@@ -72,8 +51,8 @@ def get_ring_interval(degree):
 
 
 def rings_identification(ego, ego_data, cluster_functions):
-    """Orchestrator: runs every clustering function in cluster_functions
-    on one ego's tie-strength data. Unchanged from original."""
+    """Runs every clustering function in cluster_functions on one
+    ego's tie-strength data."""
     alters, metric = map(np.array, zip(*ego_data.items()))
     output = {}
     try:
@@ -93,13 +72,12 @@ def rings_identification(ego, ego_data, cluster_functions):
 ###########################################
 #    Clustering functions                #
 ###########################################
-# NOTE: all functions below are unchanged from the original CDR
-# implementation -- confirmed fully data-agnostic, operating purely on
-# the numeric tie-strength array (`data`) and the adaptive interval.
-# The ring-relabeling convention (argsort centroids so ring 0 = highest
-# tie strength = innermost circle) MUST be preserved exactly in any
-# further modification -- getting this backwards silently swaps inner
-# and outer circles in every result.
+# All functions below operate purely on the numeric tie-strength array
+# (`data`) and the adaptive interval. The ring-relabeling convention
+# (argsort centroids so ring 0 = highest tie strength = innermost
+# circle) must be preserved exactly in any modification -- getting
+# this backwards silently swaps inner and outer circles in every
+# result.
 
 def mean_shift_clustering(data, alters, interval_ring):
     mean_shift_cl = MeanShift().fit(data.reshape(-1, 1))
@@ -116,10 +94,10 @@ def xmeans_clustering(data, alters, interval_ring):
     data_out = {}
     k_initial = interval_ring[0]
     initial_centers = kmeans_plusplus_initializer(data.reshape(-1, 1), k_initial).initialize()
-    # ccore=False: la libreria C++ precompilata di pyclustering e'
-    # inclusa solo per x86_64, incompatibile con Apple Silicon (arm64).
-    # Forziamo l'uso della sua implementazione pura Python, piu' lenta
-    # ma funzionante su qualunque architettura.
+    # ccore=False: pyclustering's precompiled C++ core is x86_64-only,
+    # incompatible with Apple Silicon (arm64). This forces the pure
+    # Python implementation instead, slower but portable across
+    # architectures.
     xmeans_cl = xmeans(data.reshape(-1, 1), initial_centers, interval_ring[1], ccore=False)
     xmeans_cl.process()
     clusters = xmeans_cl.get_clusters()
@@ -138,7 +116,7 @@ def xmeans_clustering(data, alters, interval_ring):
 def gaussian_mm_clustering(data, alters, interval_ring):
     data_out = {}
     n_components_range = range(interval_ring[0], interval_ring[1] + 1)
-    lowest_bic = np.inf  # NOTE: original used np.infty, removed in NumPy 2.0 -- fixed here
+    lowest_bic = np.inf
     best_gmm = None
     for k in n_components_range:
         gmm = GaussianMixture(n_components=k)
@@ -169,17 +147,12 @@ def _gov(data, intervals):
 
 def jenks_clustering(data, alters, interval_ring, gov_threshold=0.85):
     """
-    NOTE: original code used 0.8 here, though the paper text states
-    0.85 -- worth deciding which to use for your own thesis rather
-    than assuming they're interchangeable. Exposed as a parameter here
-    so it's easy to test both.
+    Increases the number of classes one at a time until the
+    goodness-of-variance-fit score reaches gov_threshold.
     """
     data_out = {}
     breaks, classes, centroids, num_rings = None, None, None, None
     for k in range(interval_ring[0], interval_ring[1] + 1):
-        # NOTA: il parametro si chiamava 'nb_class' nella versione della
-        # libreria usata dal relatore; e' stato rinominato in 'n_classes'
-        # in una versione successiva (per allinearsi a scikit-learn).
         breaks = jenkspy.jenks_breaks(data.ravel(), n_classes=k)
         gov, classes, centroids = _gov(data, breaks)
         num_rings = k
@@ -195,12 +168,12 @@ def jenks_clustering(data, alters, interval_ring, gov_threshold=0.85):
 
 def head_tail_break(data, threshold=0.4):
     """
-    NOT part of the adaptive method -- excluded in the original papers
-    (returns too few rings for all egos) and this implementation looks
-    buggy (the while-loop's filtering step wraps a boolean mask in a
-    list instead of indexing with it, likely breaking after one
-    iteration). Kept only for completeness/reference; skip using this
-    in your actual thesis pipeline.
+    Not part of the adaptive method: not compatible with a size-
+    dependent constraint on the number of clusters. This
+    implementation also has a known bug in the while-loop's filtering
+    step, which wraps a boolean mask in a list instead of indexing
+    with it, likely breaking after one iteration. Kept for reference
+    only; not used in the clustering pipeline.
     """
     intervals = []
     length = len(data)
@@ -211,7 +184,7 @@ def head_tail_break(data, threshold=0.4):
         length = len(head)
         mean = np.mean(head)
         intervals.append(mean)
-        head = head[head > mean]  # fixed: was `[head>mean]` in the original
+        head = head[head > mean]
     intervals.append(np.max(data) + 1)
     classes = np.searchsorted(intervals, data, side='left')
     centroids = [np.mean(data[classes == i]) for i in np.arange(len(intervals)) if np.any(classes == i)]
