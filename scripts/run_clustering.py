@@ -1,21 +1,25 @@
 """
 run_clustering.py
 
-Esegue il clustering adattivo (GMM, X-means, Jenks) per identificare le
-cerchie di Dunbar, su un singolo tipo di interazione alla volta (per la
-decisione di trattare i tipi separatamente -- vedi PIPELINE.md, Fase 6).
+Runs adaptive clustering (GMM, X-means, Jenks) to identify Dunbar
+circles, for a single interaction type at a time.
 
-Seleziona solo gli ego che superano la soglia minima di alter per quel
-tipo specifico di interazione, calcola la tie strength basata su
-frequenza, ed esegue tutti e tre gli algoritmi di clustering in
-parallelo (uno per ego).
+Only egos above the minimum personal network size for that specific
+interaction type are selected, tie strength is computed from
+frequency, and all three clustering algorithms are run in parallel,
+one process per ego.
 
-Uso:
-    python3 run_clustering.py <input_pickle> <interaction_type> <output_pickle> [soglia]
+This script is run once per interaction type, and once per dataset for
+transfer, since vote/comment and transfer come from two separate raw
+files.
 
-Esempio:
-    python3 run_clustering.py data/processed/personal_networks.pkl vote data/processed/rings_vote.pkl
-    python3 run_clustering.py data/processed/personal_networks.pkl comment data/processed/rings_comment.pkl
+Usage:
+    python3 run_clustering.py <input_pickle> <interaction_type> <output_pickle> [threshold]
+
+Example:
+    python3 run_clustering.py data/processed/personal_networks_filtered.pkl vote data/processed/rings_vote.pkl
+    python3 run_clustering.py data/processed/personal_networks_filtered.pkl comment data/processed/rings_comment.pkl
+    python3 run_clustering.py data/processed/personal_networks_transfer_filtered.pkl transfer data/processed/rings_transfer.pkl
 """
 
 import sys
@@ -24,11 +28,6 @@ import pickle
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
-
-# NOTA: il patch per l'incompatibilita' numpy.warnings/pyclustering ora
-# vive dentro personalnetwork/clustering/__init__.py (non qui), perche'
-# deve essere rieseguito in ogni processo worker di joblib -- vedi il
-# commento in quel file per i dettagli.
 
 from personalnetwork import INTERACTION_TYPES
 from personalnetwork.clustering import (
@@ -44,14 +43,14 @@ from tqdm import tqdm
 
 def run_clustering(input_pickle, interaction_type, output_pickle, threshold=50):
     if interaction_type not in INTERACTION_TYPES:
-        print(f"Tipo di interazione non valido: {interaction_type}. Validi: {INTERACTION_TYPES}")
+        print(f"Invalid interaction type: {interaction_type}. Valid types: {INTERACTION_TYPES}")
         sys.exit(1)
 
     with open(input_pickle, 'rb') as f:
         personal_networks = pickle.load(f)
 
-    # Seleziona solo gli ego sopra soglia per QUESTO specifico tipo di
-    # interazione, e calcola la tie strength (frequenza) solo su quel tipo.
+    # Select only egos above threshold for this specific interaction
+    # type, and compute tie strength (frequency) for that type only.
     ego_tie_strength = {}
     for ego_id, ego in personal_networks.items():
         degree = ego.out_degree(interaction_type)
@@ -64,11 +63,11 @@ def run_clustering(input_pickle, interaction_type, output_pickle, threshold=50):
             }
             ego_tie_strength[ego_id] = ts
 
-    print(f"Tipo di interazione: {interaction_type}")
-    print(f"Ego selezionati per il clustering (>= {threshold} alter): {len(ego_tie_strength)}")
+    print(f"Interaction type: {interaction_type}")
+    print(f"Egos selected for clustering (>= {threshold} alters): {len(ego_tie_strength)}")
 
     if len(ego_tie_strength) == 0:
-        print("Nessun ego sopra soglia -- interrompo.")
+        print("No egos above threshold -- stopping.")
         sys.exit(1)
 
     cluster_functions = {
@@ -77,24 +76,24 @@ def run_clustering(input_pickle, interaction_type, output_pickle, threshold=50):
         'jenks': jenks_clustering,
     }
 
-    print("Eseguo il clustering in parallelo...")
+    print("Running clustering in parallel...")
     with Parallel(n_jobs=-1) as parallel:
         results = parallel(
             delayed(rings_identification)(ego, ts, cluster_functions)
             for ego, ts in tqdm(ego_tie_strength.items())
         )
 
-    # rings_identification restituisce una tupla (ego, output) in caso di
-    # successo, o solo l'id dell'ego (stringa) in caso di errore -- si
-    # filtrano via questi ultimi.
+    # rings_identification returns a (ego, output) tuple on success,
+    # or just the ego id (a string) on error -- the latter are
+    # filtered out here.
     rings = dict(r for r in results if isinstance(r, tuple))
     n_errors = len(results) - len(rings)
     if n_errors:
-        print(f"Attenzione: {n_errors} ego hanno dato errore durante il clustering (esclusi dal risultato).")
+        print(f"Warning: {n_errors} egos failed during clustering (excluded from the result).")
 
     with open(output_pickle, 'wb') as f:
         pickle.dump(rings, f)
-    print(f"Salvato in {output_pickle} ({len(rings)} ego con risultati validi)")
+    print(f"Saved to {output_pickle} ({len(rings)} egos with valid results)")
 
 
 if __name__ == '__main__':
