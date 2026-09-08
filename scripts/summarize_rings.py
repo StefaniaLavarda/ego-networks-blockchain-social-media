@@ -1,18 +1,18 @@
 """
 summarize_rings.py
 
-Riepiloga i risultati del clustering (output di run_clustering.py):
-per ciascun algoritmo, mostra quanti ego convergono su ciascun numero
-di cerchie, il silhouette score medio, e una tabella con dimensione
-media/deviazione standard di ciascuna cerchia (stile Tabella 3/4 del
-Support Information di Zignani et al.).
+Summarizes clustering results (output of run_clustering.py): for each
+algorithm, reports how many egos converge on each number of circles,
+the average silhouette score, and a table with the average size and
+standard deviation of each circle.
 
-Uso:
-    python3 summarize_rings.py <input_pickle> [output_csv] [soglia_min_network]
+Usage:
+    python3 summarize_rings.py <input_pickle> [output_csv] [min_network_size]
 
-Esempio:
+Example:
     python3 summarize_rings.py data/processed/rings_vote.pkl
-    python3 summarize_rings.py data/processed/rings_vote.pkl output/tabella_vote.csv
+    python3 summarize_rings.py data/processed/rings_vote.pkl output/table_vote.csv
+    python3 summarize_rings.py data/processed/rings_transfer.pkl output/table_transfer.csv
 """
 
 import sys
@@ -31,7 +31,7 @@ def summarize(input_pickle, output_csv=None, min_network_size=50):
     with open(input_pickle, 'rb') as f:
         rings = pickle.load(f)
 
-    print(f"Ego totali con risultati di clustering: {len(rings)}\n")
+    print(f"Total egos with clustering results: {len(rings)}\n")
 
     algo_names = set()
     for ego_data in rings.values():
@@ -44,25 +44,25 @@ def summarize(input_pickle, output_csv=None, min_network_size=50):
         total = len(num_rings_list)
 
         print(f"--- {algo} ---")
-        print(f"Ego processati: {total}")
-        print(f"Silhouette medio: {np.mean(silhouettes):.3f} (std: {np.std(silhouettes):.3f})")
-        print("Distribuzione numero di cerchie:")
+        print(f"Egos processed: {total}")
+        print(f"Average silhouette: {np.mean(silhouettes):.3f} (std: {np.std(silhouettes):.3f})")
+        print("Distribution of number of circles:")
         for k in sorted(counter.keys()):
             pct = 100 * counter[k] / total
-            print(f"  {k} cerchie: {counter[k]} ego ({pct:.1f}%)")
+            print(f"  {k} circles: {counter[k]} egos ({pct:.1f}%)")
         print()
 
-    # Tabella dimensioni cerchie, stile Tabella 3/4 Zignani et al.
-    # L'intervallo 3-6 copre l'intero range del vincolo adattivo
-    # (get_ring_interval: da 50-99 alter a >=300 alter).
+    # Circle-size table. The 3-6 range covers the full span of the
+    # adaptive constraint (get_ring_interval: from 50-99 alters up to
+    # 300+ alters).
     intervals = range(3, 7)
     table = ring_size_to_table(rings, intervals, min_network_size)
-    print("--- Tabella riepilogativa dimensioni cerchie ---")
+    print("--- Circle size summary table ---")
     print(table.to_string(index=False))
 
     if output_csv:
         table.to_csv(output_csv, index=False)
-        print(f"\nTabella salvata in {output_csv}")
+        print(f"\nTable saved to {output_csv}")
 
 
 if __name__ == '__main__':
