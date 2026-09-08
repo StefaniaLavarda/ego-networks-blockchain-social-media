@@ -1,6 +1,15 @@
 # Pipeline Documentation
 
-## Overview 
+## Overview
+
+Two datasets are processed through the same pipeline, independently:
+vote/comment/transfer (Jan-Jun 2017) and a transfer-only dataset
+(Nov 2018-May 2019), used because very few accounts reach the
+clustering threshold on transfer within the first period. Steps 1-3
+below are run once per dataset; steps 4-6 are run once per
+interaction type.
+
+```
 raw CSV (source, target, weight, date, type)
         |
         v
@@ -26,22 +35,29 @@ raw CSV (source, target, weight, date, type)
         |
         v
 [6] validation against Dunbar's predicted circle sizes
+```
 
 ## Stage-by-stage detail
 
 ### [1] Build the communication graph
 **Script:** `build_graph.py`.
 
-Builds a single `networkx.DiGraph` from the raw CSV. A row is
-discarded if it does not have five fields, its type is not one of the
-three valid types, or it is a self-loop. An edge `(source, target)` is
+Builds a single `networkx.DiGraph` from a raw CSV. A row is discarded
+if it does not have five fields, its type is not one of the three
+valid types, or it is a self-loop. An edge `(source, target)` is
 created or updated, incrementing the counter `c_{type}` for that edge.
+
+Run once per dataset:
+```bash
+python3 build_graph.py data/raw/steem_vote_comment_transfer_01012017_30062017.csv data/processed/communication_graph.pkl
+python3 build_graph.py data/raw/steem_transfer_01112018_31052019.csv data/processed/communication_graph_transfer.pkl
+```
 
 | Column | Meaning | Used? |
 |---|---|---|
 | `source` | ego | yes |
 | `target` | alter | yes |
-| `weight` | voting weight (-10000 to 10000) for `vote`; constant `1.0` for `comment`; transfer amount for `transfer` | no |
+| `weight` | voting weight (-10000 to 10000, negative = downvote) for `vote`; transfer amount for `transfer`; constant `1.0` (no information) for `comment` | no |
 | `date` | timestamp | no |
 | `type` | `vote` / `comment` / `transfer` | yes |
 
@@ -51,9 +67,12 @@ created or updated, incrementing the counter `c_{type}` for that edge.
 Computes in-degree and out-degree directly on the graph via
 `G.out_degree()` / `G.in_degree()`, for every account with a positive
 out-degree. An account is flagged as suspicious if its in/out-degree
-ratio is 0. `compute_bot_scores.py` and `check_bot_overlap.py` are
-diagnostic scripts used to validate this threshold and are not part of
-the main run.
+ratio is 0. Applied separately to each of the two graphs, since they
+come from different datasets; the resulting share of suspicious
+accounts differs between them (around 35% for vote/comment, around
+29% for transfer). `compute_bot_scores.py` and `check_bot_overlap.py`
+are diagnostic scripts used to validate this threshold and are not
+part of the main run.
 
 ### [3] Extract personal networks + filter by size
 **Script:** `extract_personal_networks.py` + `check_threshold.py`.
@@ -69,8 +88,9 @@ pickle instead of during extraction; used to produce the
 unfiltered/filtered pair for the before/after comparison in Section
 4.1.1.
 
-`transfer` reaches 50 alters for very few egos; a decision on how to
-treat this interaction type in the final analysis is pending.
+`transfer` reaches 50 alters for very few egos within the first
+dataset's period. This is why a second, transfer-only dataset covering
+a later and longer period is used for this interaction type.
 
 ### [4] Compute tie strength
 `frequency_tie_strength(alter_data, ego_total, interaction_type)` in
@@ -82,9 +102,10 @@ interaction type.
 
 Three algorithms: Gaussian Mixture Models, X-means, Jenks natural
 breaks, each constrained to a size-dependent range of admissible
-cluster counts via `get_ring_interval()`. Mean Shift and Head/Tail
-Breaks are not used, since neither accepts a direct constraint on the
-number of clusters.
+cluster counts via `get_ring_interval()`. The Jenks goodness-of-fit
+threshold is set to 0.85. Mean Shift and Head/Tail Breaks are not
+used, since neither accepts a direct constraint on the number of
+clusters.
 
 Ring-relabeling convention: `argsort` on cluster centroids, so ring 0
 always corresponds to the highest tie strength (innermost circle),
@@ -97,4 +118,6 @@ Produces circle-count distributions and a size/standard-deviation
 table per algorithm, per interaction type. Cross-interaction-type
 comparison (Jaccard overlap of alters between vote and comment, then
 Normalized Mutual Information on the shared alters' circle assignment)
-is not yet implemented.
+is limited to vote and comment, since these are the only two
+interaction types that come from the same dataset and time period;
+transfer is excluded from this specific comparison.
