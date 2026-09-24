@@ -7,7 +7,8 @@ vote/comment/transfer (Jan-Jun 2017) and a transfer-only dataset
 (Nov 2018-May 2019), used because very few accounts reach the
 clustering threshold on transfer within the first period. Steps 1-3
 below are run once per dataset; steps 4-6 are run once per
-interaction type.
+interaction type; step 7 is post-processing, run once the relevant
+clustering results already exist.
 
 ```
 raw CSV (source, target, weight, date, type)
@@ -35,6 +36,10 @@ raw CSV (source, target, weight, date, type)
         |
         v
 [6] validation against Dunbar's predicted circle sizes
+        |
+        v
+[7] post-processing: tie strength by ring, comparison across
+    interaction types, clustering failure diagnostics, figures
 ```
 
 ## Stage-by-stage detail
@@ -111,13 +116,45 @@ Ring-relabeling convention: `argsort` on cluster centroids, so ring 0
 always corresponds to the highest tie strength (innermost circle),
 consistent across all algorithms and interaction types.
 
+A small share of egos fail to produce a valid result for a given
+algorithm, due to degenerate clustering: forming $k$ circles requires
+at least $k$ distinct tie strength values, and some egos, especially
+on transfer, do not have enough. See Stage 7 for the diagnostic
+scripts that quantify and explain this.
+
 ### [6] Validation against Dunbar's hypothesis
 **Script:** `summarize_rings.py`.
 
 Produces circle-count distributions and a size/standard-deviation
-table per algorithm, per interaction type. Cross-interaction-type
-comparison (Jaccard overlap of alters between vote and comment, then
-Normalized Mutual Information on the shared alters' circle assignment)
-is limited to vote and comment, since these are the only two
-interaction types that come from the same dataset and time period;
-transfer is excluded from this specific comparison.
+table per algorithm, per interaction type.
+
+### [7] Post-processing
+
+**Tie strength by ring.** `tie_strength_by_ring.py` groups alters by
+their assigned ring, across all egos sharing the same algorithm and
+circle count, and reports the mean, median, and standard deviation of
+tie strength per ring, plus a check that these values decrease
+monotonically from ring 0 outward. Optionally also produces a KDE
+plot per algorithm/circle-count combination.
+
+**Comparison across interaction types.** `compare_vote_comment.py`
+computes, for each ego qualifying on both vote and comment, the
+Jaccard overlap between the two alter sets, then the Normalized
+Mutual Information between the two circle assignments, restricted to
+the alters common to both. This comparison is limited to vote and
+comment, since these are the only two interaction types that come
+from the same dataset and time period; transfer is excluded.
+
+**Clustering failure diagnostics.** `check_distinct_values_vs_kmin.py`
+checks, for each ego, whether the number of distinct tie strength
+values is enough to structurally support the minimum number of
+circles required for its personal network size; an ego with fewer
+distinct values than this minimum cannot succeed regardless of the
+clustering algorithm used. `check_failure_correlates.py` compares
+personal network size and tie-strength variability between egos whose
+clustering succeeded and those whose clustering failed.
+
+**Figures.** `plot_circle_count_distribution.py` produces a grouped
+bar chart of the circle-count distribution by interaction type, one
+per algorithm. `plot_nmi_distribution.py` produces a CDF plot of the
+NMI distribution from `compare_vote_comment.py`'s output.
