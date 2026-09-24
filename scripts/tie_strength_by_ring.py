@@ -57,12 +57,17 @@ def collect_tie_strength_by_ring(personal_networks, rings, interaction_type):
 
 
 def summarize(personal_networks_pickle, rings_pickle, interaction_type, output_csv, output_png_dir=None):
+    print(f"Loading {personal_networks_pickle}...")
     with open(personal_networks_pickle, 'rb') as f:
         personal_networks = pickle.load(f)
+    print(f"Loading {rings_pickle}...")
     with open(rings_pickle, 'rb') as f:
         rings = pickle.load(f)
+    print(f"Loaded {len(personal_networks)} personal networks and {len(rings)} clustering results.")
+    print("Grouping tie strength by ring...")
 
     grouped = collect_tie_strength_by_ring(personal_networks, rings, interaction_type)
+    print("Grouping done.")
 
     rows = []
     for (algo, num_rings, ring), values in sorted(grouped.items()):
@@ -118,7 +123,8 @@ def summarize(personal_networks_pickle, rings_pickle, interaction_type, output_c
                         xs = np.linspace(min(values), max(values), 200)
                         plt.plot(xs, density(xs), label=f'ring {ring}')
                     plt.xlabel('tie strength')
-                    plt.ylabel('density')
+                    plt.ylabel('density (log scale)')
+                    plt.yscale('log')
                     plt.title(f'{algo}, {num_rings} circles ({interaction_type})')
                     plt.legend()
                     plt.tight_layout()
